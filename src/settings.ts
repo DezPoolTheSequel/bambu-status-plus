@@ -7,6 +7,7 @@ export type Page = "status" | "ams" | "temps";
 export interface ActionSettings {
 	[key: string]: string | number | boolean | undefined;
 	// --- printer (the access code lives in global settings, never here)
+	name: string; // shown on the key; falls back to the Stream Deck title
 	ip: string;
 	serial: string;
 	// --- pages
@@ -25,6 +26,7 @@ export interface ActionSettings {
 }
 
 export const DEFAULTS: ActionSettings = {
+	name: "",
 	ip: "",
 	serial: "",
 	pageStatus: true,
@@ -53,6 +55,7 @@ export function resolveSettings(raw: Partial<Record<string, unknown>> | undefine
 		const v = s[k];
 		(s as any)[k] = v === true || v === "true" || v === 1 || v === "1" || v === "on";
 	}
+	s.name = String(s.name).trim();
 	s.ip = String(s.ip).trim();
 	s.serial = String(s.serial).trim().toUpperCase();
 	if (!FIELDS.includes(s.big)) s.big = DEFAULTS.big;

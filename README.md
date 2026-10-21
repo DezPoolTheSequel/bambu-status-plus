@@ -23,12 +23,12 @@ swap them, or pick something else.
 
   There's a **swap** button in the settings and an option to hide the state line, which makes the
   big value bigger.
-- **AMS page:** the filament colour in every slot, labelled with the material (or the remaining
-  %, if you choose that instead). It also shows the slot that's feeding right now, plus humidity
-  and temperature. Supports AMS, AMS 2 Pro, AMS HT and AMS lite. With several units, dots show
-  which unit you're on.
-- **Temperature page:** nozzle, bed and chamber temperatures, with the target temperature while
-  heating. Shown in °C or °F. Works with H2-series printers, which report temperatures differently
+- **AMS page:** a 2×2 grid of numbered slots in the filament colour, labelled with the material.
+  Or choose remaining %, and the colour fills each slot up to what's left. It also shows the slot
+  that's feeding right now, plus humidity and temperature. Supports AMS, AMS 2 Pro, AMS HT and AMS
+  lite, and the heading shows which unit you're on (`AMS 1/2`).
+- **Temperature page:** nozzle, bed and chamber temperatures, with the target temperature in
+  orange while heating. Shown in °C or °F. Works with H2-series printers, which report temperatures differently
   from older models.
 - **Colours change with the state:** printing, preparing, paused, done, idle, cancelled, error,
   offline. When something is wrong, the bottom line says what (`CHECK ACCESS CODE`,
@@ -45,8 +45,8 @@ On the printer's screen, find these settings:
 - **IP address** and **LAN access code**: Settings → Network (WLAN)
 - **Serial number**: Settings → Device
 
-Enter them in the key's settings. Use the Stream Deck **Title** field for the name shown at the top
-of the key, for example `H2S`.
+Enter them in the key's settings, along with a **Printer name** (for example `H2S`) to show on the
+key. Leave Stream Deck's own **Title** field blank, because the key draws the name itself.
 
 ## Requirements
 

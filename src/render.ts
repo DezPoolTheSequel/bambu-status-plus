@@ -180,11 +180,7 @@ export function renderStatus(snap: Snapshot, s: ActionSettings, view: View): str
 
 // ---------------------------------------------------------------- AMS page
 
-export function amsName(unit: AmsUnit, all: AmsUnit[]): string {
-	if (unit.trays.length === 1) return "AMS HT";
-	const multi = all.filter((u) => u.trays.length > 1);
-	return multi.length > 1 ? `AMS ${multi.indexOf(unit) + 1}` : "AMS";
-}
+const kind = (unit: AmsUnit) => (unit.trays.length === 1 ? "AMS HT" : "AMS");
 
 /** Black or white text, whichever reads better on the filament colour. */
 function inkOn(hex: string): string {
@@ -196,65 +192,84 @@ function inkOn(hex: string): string {
 const drop = (x: number, y: number, fill: string) =>
 	`<path d="M${x} ${y - 6} C${x + 4} ${y - 1} ${x + 5} ${y + 1} ${x + 5} ${y + 3} A5 5 0 0 1 ${x - 5} ${y + 3} C${x - 5} ${y + 1} ${x - 4} ${y - 1} ${x} ${y - 6} Z" fill="${fill}"/>`;
 
+/** Printer name centred on top with the page heading under it (AMS + temperature pages). */
+function pageHeader(p: Palette, view: View, heading: string): string {
+	const out: string[] = [];
+	if (view.showLabel && view.label) out.push(text(view.label, 72, 29, fit(view.label, 13, MAX_W), "#FFFFFF", 800, "middle"));
+	out.push(text(heading, 72, 47, fit(heading, 15, MAX_W), p.accent, 900, "middle"));
+	return out.join("");
+}
+
+/** Text with a dark halo so it reads on any filament colour (or on a half-filled slot). */
+function haloText(str: string, x: number, y: number, size: number): string {
+	const common = `x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-family="${FONT}" font-size="${size}" font-weight="900" text-anchor="middle"`;
+	return `<text ${common} fill="#000000" stroke="#000000" stroke-width="3" stroke-linejoin="round" stroke-opacity=".75">${esc(str)}</text><text ${common} fill="#FFFFFF">${esc(str)}</text>`;
+}
+
 export function renderAms(snap: Snapshot, s: ActionSettings, view: View, unitIndex: number): string {
 	const p = PALETTES[snap.state];
 	const parts: string[] = [frame(p, progressFor(snap))];
 	const unit = snap.ams[unitIndex];
 	if (!unit) {
-		parts.push(header(p, view, "AMS"));
+		parts.push(pageHeader(p, view, "AMS"));
 		const msg = snap.state === "OFFLINE" || snap.state === "CONNECTING" ? STATE_LABEL[snap.state] : "NO AMS";
-		parts.push(text(msg, 72, 84, fit(msg, 20, MAX_W), p.dim, 900, "middle"));
+		parts.push(text(msg, 72, 92, fit(msg, 20, MAX_W), p.dim, 900, "middle"));
 		return svgDoc(parts);
 	}
+	parts.push(pageHeader(p, view, snap.ams.length > 1 ? `${kind(unit)} ${unitIndex + 1}/${snap.ams.length}` : kind(unit)));
 
-	parts.push(header(p, view, amsName(unit, snap.ams)));
-	// One dot per unit under the tag so you can tell where you are in the cycle.
-	if (snap.ams.length > 1)
-		snap.ams.forEach((_, i) => {
-			const cx = RIGHT - 2 - (snap.ams.length - 1 - i) * 7;
-			parts.push(`<circle cx="${cx}" cy="36" r="2" fill="${i === unitIndex ? p.accent : p.dim}" fill-opacity="${i === unitIndex ? 1 : 0.4}"/>`);
-		});
-
-	// Slots: four columns (or one wide one for an AMS HT).
+	// 2×2 grid of slots (one wide slot for an AMS HT), each with its number badge and material / %.
 	const n = unit.trays.length;
-	const gap = 5;
-	const colW = n === 1 ? 44 : (MAX_W - gap * (n - 1)) / n;
-	const x0 = n === 1 ? 72 - colW / 2 : LEFT;
-	const top = 43;
-	const h = 50;
+	const gap = 4;
+	const top = 53;
+	const cellW = n === 1 ? MAX_W : (MAX_W - gap) / 2;
+	const cellH = n === 1 ? 56 : 26;
 	const unitBase = unit.id * 4; // tray_now numbers slots across units: AMS 0 = 0-3, AMS 1 = 4-7, ...
 	unit.trays.forEach((t, i) => {
-		const x = x0 + i * (colW + gap);
-		const cx = x + colW / 2;
+		const x = LEFT + (i % 2) * (cellW + gap);
+		const y = top + Math.floor(i / 2) * (cellH + gap);
 		const active = snap.activeTray === unitBase + i || (n === 1 && snap.activeTray === unit.id);
+		const box = `x="${x.toFixed(1)}" y="${y}" width="${cellW.toFixed(1)}" height="${cellH}" rx="5"`;
+		const remainView = s.amsView === "remain" && t.remain >= 0;
+
 		if (t.empty) {
-			parts.push(`<rect x="${x.toFixed(1)}" y="${top}" width="${colW.toFixed(1)}" height="${h}" rx="5" fill="#000000" fill-opacity=".25" stroke="#FFFFFF" stroke-opacity=".3" stroke-width="1.5" stroke-dasharray="3 3"/>`);
-			parts.push(text("—", cx, top + h + 14, 12, p.dim, 800, "middle"));
-			return;
-		}
-		if (s.amsView === "remain" && t.remain >= 0) {
-			// Colour fills the slot from the bottom up to the remaining amount.
-			const fh = Math.max(3, (h * Math.min(100, t.remain)) / 100);
-			parts.push(`<rect x="${x.toFixed(1)}" y="${top}" width="${colW.toFixed(1)}" height="${h}" rx="5" fill="#000000" fill-opacity=".3"/>`);
-			parts.push(`<rect x="${x.toFixed(1)}" y="${(top + h - fh).toFixed(1)}" width="${colW.toFixed(1)}" height="${fh.toFixed(1)}" rx="5" fill="${t.color}"/>`);
+			parts.push(`<rect ${box} fill="#000000" fill-opacity=".3" stroke="#FFFFFF" stroke-opacity=".35" stroke-width="1.5" stroke-dasharray="3 3"/>`);
+		} else if (remainView) {
+			// Colour fills the slot from the left up to the remaining amount.
+			const fw = Math.max(4, (cellW * Math.min(100, t.remain)) / 100);
+			parts.push(`<rect ${box} fill="#000000" fill-opacity=".35"/>`);
+			parts.push(`<rect x="${x.toFixed(1)}" y="${y}" width="${fw.toFixed(1)}" height="${cellH}" rx="5" fill="${t.color}"/>`);
 		} else {
-			parts.push(`<rect x="${x.toFixed(1)}" y="${top}" width="${colW.toFixed(1)}" height="${h}" rx="5" fill="${t.color}"/>`);
+			parts.push(`<rect ${box} fill="${t.color}"/>`);
 		}
-		parts.push(`<rect x="${x.toFixed(1)}" y="${top}" width="${colW.toFixed(1)}" height="${h}" rx="5" fill="none" stroke="#FFFFFF" stroke-opacity="${active ? 1 : 0.35}" stroke-width="${active ? 3 : 1.5}"/>`);
-		if (active) parts.push(`<path d="M${(cx - 5).toFixed(1)} ${top - 7} H${(cx + 5).toFixed(1)} L${cx.toFixed(1)} ${top - 1} Z" fill="#FFFFFF"/>`);
-		const label = s.amsView === "remain" ? (t.remain >= 0 ? `${t.remain}%` : "--") : t.material;
-		parts.push(text(label, cx, top + h + 14, fit(label, 12, colW + 2, 7), "#FFFFFF", 800, "middle"));
+		if (!t.empty) parts.push(`<rect ${box} fill="none" stroke="${active ? p.accent : "#FFFFFF"}" stroke-opacity="${active ? 1 : 0.35}" stroke-width="${active ? 3 : 1.5}"/>`);
+
+		// Slot number badge
+		const bh = Math.min(18, cellH - 8);
+		const by = y + (cellH - bh) / 2;
+		parts.push(`<rect x="${(x + 4).toFixed(1)}" y="${by.toFixed(1)}" width="14" height="${bh}" rx="3" fill="#FFFFFF" fill-opacity=".9" stroke="#000000" stroke-opacity=".3"/>`);
+		parts.push(text(String(i + 1), x + 11, by + bh / 2 + 4, 12, "#111111", 900, "middle"));
+
+		const label = t.empty ? "EMPTY" : remainView ? `${t.remain}%` : s.amsView === "remain" ? "--" : t.material;
+		const lx = x + 20 + (cellW - 22) / 2;
+		const ly = y + cellH / 2 + 4.5;
+		const size = fit(label, n === 1 ? 18 : 13, cellW - 24, 8);
+		if (t.empty) parts.push(text(label, lx, ly, size, p.dim, 900, "middle"));
+		else if (remainView) parts.push(haloText(label, lx, ly, size));
+		else parts.push(text(label, lx, ly, size, inkOn(t.color), 900, "middle"));
 	});
 
-	// Humidity + temperature along the bottom.
-	const bottom: string[] = [];
-	if (unit.humidity !== undefined) bottom.push(`${Math.round(unit.humidity)}%`);
-	else if (unit.humidityLevel !== undefined) bottom.push(`Lvl ${unit.humidityLevel}`);
-	if (unit.humidity !== undefined || unit.humidityLevel !== undefined) {
-		parts.push(drop(LEFT + 5, 120, "#6EC1FF"));
-		parts.push(text(bottom[0], LEFT + 14, 125, 13, p.dim));
-	}
-	if (unit.temp !== undefined) parts.push(text(temp(unit.temp, s.tempUnit), RIGHT, 125, 13, p.dim, 800, "end"));
+	// Humidity + temperature, centred along the bottom.
+	const hum = unit.humidity !== undefined ? `${Math.round(unit.humidity)}%` : unit.humidityLevel !== undefined ? `Lvl ${unit.humidityLevel}` : "";
+	const tmp = unit.temp !== undefined ? `${temp(unit.temp, s.tempUnit)}${s.tempUnit}` : "";
+	if (hum && tmp) {
+		parts.push(drop(72 - 8 - textWidth(hum, 14) - 9, 121, "#6EC1FF"));
+		parts.push(text(hum, 64, 126, 14, "#FFFFFF", 900, "end"));
+		parts.push(text(tmp, 80, 126, 14, "#FFFFFF", 900));
+	} else if (hum) {
+		parts.push(drop(72 - textWidth(hum, 14) / 2 - 5, 121, "#6EC1FF"));
+		parts.push(text(hum, 72 + 6, 126, 14, "#FFFFFF", 900, "middle"));
+	} else if (tmp) parts.push(text(tmp, 72, 126, 14, "#FFFFFF", 900, "middle"));
 	return svgDoc(parts);
 }
 
@@ -263,37 +278,26 @@ export function renderAms(snap: Snapshot, s: ActionSettings, view: View, unitInd
 const temp = (c: number | undefined, unit: ActionSettings["tempUnit"]) =>
 	c === undefined ? "--" : `${Math.round(unit === "F" ? (c * 9) / 5 + 32 : c)}°`;
 
-const ICONS = {
-	nozzle: (c: string) =>
-		`<rect x="2" y="0" width="14" height="9" rx="1.5" fill="${c}"/><path d="M5 9 H13 L10.5 15 H7.5 Z" fill="${c}"/><rect x="8" y="15" width="2" height="3" fill="${c}"/>`,
-	bed: (c: string) =>
-		`<path d="M3 2 q2 3 0 6 q-2 3 0 6 M9 2 q2 3 0 6 q-2 3 0 6 M15 2 q2 3 0 6 q-2 3 0 6" fill="none" stroke="${c}" stroke-width="1.8" stroke-linecap="round" transform="translate(0 -2) scale(1 .75)"/><rect x="0" y="12" width="18" height="5" rx="1.5" fill="${c}"/>`,
-	chamber: (c: string) =>
-		`<rect x="1" y="0" width="16" height="18" rx="2.5" fill="none" stroke="${c}" stroke-width="2"/><rect x="8" y="4" width="2.6" height="7" rx="1.3" fill="${c}"/><circle cx="9.3" cy="12.5" r="2.6" fill="${c}"/>`,
-};
+const TARGET = "#FFA53A";
 
 export function renderTemps(snap: Snapshot, s: ActionSettings, view: View): string {
 	const p = PALETTES[snap.state];
-	const parts: string[] = [frame(p, progressFor(snap)), header(p, view, s.tempUnit === "F" ? "°F" : "°C")];
+	const parts: string[] = [frame(p, progressFor(snap)), pageHeader(p, view, "TEMPERATURE")];
 	const t = snap.temps;
-	const rows: [keyof typeof ICONS, number | undefined, number | undefined][] = [
-		["nozzle", t.nozzle, t.nozzleTarget],
-		["bed", t.bed, t.bedTarget],
-		["chamber", t.chamber, undefined],
+	const rows: [string, number | undefined, number | undefined][] = [
+		["Noz", t.nozzle, t.nozzleTarget],
+		["Bed", t.bed, t.bedTarget],
+		["Chm", t.chamber, undefined],
 	];
-	rows.forEach(([icon, cur, target], i) => {
-		const y = 56 + i * 29; // text baseline
-		const heating = (target ?? 0) > 0;
-		parts.push(`<g transform="translate(${LEFT} ${y - 17})">${ICONS[icon](heating ? p.accent : p.dim)}</g>`);
+	rows.forEach(([label, cur, target], i) => {
+		const y = 73 + i * 23; // text baseline
+		parts.push(text(label, LEFT, y, 13, "#FFFFFF", 800));
 		const v = temp(cur, s.tempUnit);
-		const size = fit(v, 23, 68);
-		parts.push(text(v, LEFT + 26, y, size, "#FFFFFF", 900));
-		if (heating) {
-			// Target goes after the reading if it fits, otherwise it's left out.
-			const tx = LEFT + 28 + textWidth(v, size);
-			const tgt = `/${temp(target, s.tempUnit)}`;
-			const ts = fit(tgt, 13, RIGHT + 2 - tx);
-			if (ts >= 10) parts.push(text(tgt, tx, y, ts, p.dim));
+		// Reading right-aligned in the middle column, target in orange on the right while heating.
+		parts.push(text(v, 92, y, fit(v, 18, 40), "#FFFFFF", 900, "end"));
+		if ((target ?? 0) > 0) {
+			const tg = temp(target, s.tempUnit);
+			parts.push(text(tg, RIGHT + 1, y, fit(tg, 14, 30), TARGET, 900, "end"));
 		}
 	});
 	return svgDoc(parts);

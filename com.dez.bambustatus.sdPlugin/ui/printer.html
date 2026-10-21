@@ -40,6 +40,11 @@
 
 <!-- ======================= PRINTER ======================= -->
 <div class="row">
+  <label>Printer name</label>
+  <div class="ctl"><input type="text" data-key="name" placeholder="shown on the key, e.g. H2S" spellcheck="false" /></div>
+</div>
+<div class="hint">Leave the Stream Deck Title above blank. The key draws this name itself.</div>
+<div class="row">
   <label>Printer IP</label>
   <div class="ctl"><input type="text" id="ip" placeholder="192.168.1.50" spellcheck="false" /></div>
 </div>
@@ -147,7 +152,7 @@
 <script>
   const $ = (s) => document.querySelector(s);
   const $$ = (s) => [...document.querySelectorAll(s)];
-  const DEFAULTS = { ip: "", serial: "", big: "percent", small: "remaining", showState: true, timeFormat: "hm", clock: "12", pageStatus: true, pageAms: true, pageTemps: true, amsView: "material", tempUnit: "C" };
+  const DEFAULTS = { name: "", ip: "", serial: "", big: "percent", small: "remaining", showState: true, timeFormat: "hm", clock: "12", pageStatus: true, pageAms: true, pageTemps: true, amsView: "material", tempUnit: "C" };
 
   let ws, ctx, actionUUID, settings = { ...DEFAULTS }, globalSettings = { credentials: {} };
 

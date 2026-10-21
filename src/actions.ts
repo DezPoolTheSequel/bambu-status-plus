@@ -39,7 +39,8 @@ const codeFor = (s: ActionSettings) => String(credentials[printerKey(s)] ?? "").
 interface Instance {
 	action: KeyAction<JsonObject> | DialAction<JsonObject>;
 	settings: ActionSettings;
-	label: string;
+	/** Stream Deck title, used when the Printer name setting is blank */
+	title: string;
 	showLabel: boolean;
 	printer?: Printer;
 	listener?: (snap: Snapshot) => void;
@@ -79,7 +80,7 @@ export class PrinterStatus extends SingletonAction<JsonObject> {
 		const it: Instance = {
 			action: ev.action as Instance["action"],
 			settings,
-			label: "BAMBU",
+			title: "",
 			showLabel: true,
 			page: pagesFor(settings)[0],
 			amsIndex: 0,
@@ -112,8 +113,9 @@ export class PrinterStatus extends SingletonAction<JsonObject> {
 	override async onTitleParametersDidChange(ev: TitleParametersDidChangeEvent<JsonObject>): Promise<void> {
 		const it = this.items.get(ev.action.id);
 		if (!it) return;
-		// The title is drawn inside the image (top-left, in the state colour), so hide Stream Deck's own.
-		it.label = String(ev.payload.title ?? "").trim() || "BAMBU";
+		// The name is drawn inside the image. Leftover from v1.0: a Stream Deck title is used as the name
+		// when the Printer name setting is blank.
+		it.title = String(ev.payload.title ?? "").trim();
 		it.showLabel = ev.payload.titleParameters?.showTitle !== false;
 		if (ev.action.isKey() && ev.payload.title) await ev.action.setTitle("");
 		await this.redraw(it);
@@ -219,7 +221,8 @@ export class PrinterStatus extends SingletonAction<JsonObject> {
 	}
 
 	private async draw(it: Instance, snap: Snapshot): Promise<void> {
-		const view = { label: it.label, showLabel: it.showLabel };
+		const label = it.settings.name || it.title || "BAMBU";
+		const view = { label, showLabel: it.showLabel };
 		if (it.action.isKey()) {
 			if (it.amsIndex >= snap.ams.length) it.amsIndex = 0; // a unit went away
 			const svg =
@@ -233,7 +236,7 @@ export class PrinterStatus extends SingletonAction<JsonObject> {
 			it.lastImage = img;
 			await it.action.setImage(img);
 		} else if (it.action.isDial()) {
-			const fb = dialFeedback(snap, it.settings, it.label);
+			const fb = dialFeedback(snap, it.settings, label);
 			const json = JSON.stringify(fb);
 			if (json === it.lastFeedback) return;
 			it.lastFeedback = json;

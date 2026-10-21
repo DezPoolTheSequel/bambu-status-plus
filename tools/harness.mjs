@@ -41,7 +41,7 @@ const printers = {
 
 const scenarios = [
 	// [name, action, serial, settings, title, controller]
-	["01-percent-big", STATUS, "P93", {}, "H2S"],
+	["01-percent-big", STATUS, "P93", { name: "Marshmallow" }, ""],
 	["02-time-big", STATUS, "P32", { big: "remaining", small: "percent" }, "H2S"],
 	["03-finish-big", STATUS, "P32", { big: "finish", small: "percent" }, "P2S"],
 	["04-layer-big", STATUS, "P32", { big: "layer", small: "finish" }, "P2S"],
