@@ -1,0 +1,98 @@
+{
+  "$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
+  "Name": "Bambu Status Plus",
+  "Version": "1.0.0.0",
+  "Author": "Dez",
+  "Description": "Live status of your Bambu Lab printers over LAN: a progress border that fills as the print runs, with your choice of what goes big in the middle (percent, time left, finish time or layer) and what goes small underneath. Plus chamber light control.",
+  "Category": "Bambu Status Plus",
+  "CategoryIcon": "imgs/plugin/category-icon",
+  "Icon": "imgs/plugin/marketplace",
+  "CodePath": "bin/plugin.js",
+  "SDKVersion": 2,
+  "Software": {
+    "MinimumVersion": "6.6"
+  },
+  "OS": [
+    {
+      "Platform": "windows",
+      "MinimumVersion": "10"
+    },
+    {
+      "Platform": "mac",
+      "MinimumVersion": "12"
+    }
+  ],
+  "Nodejs": {
+    "Version": "20"
+  },
+  "UUID": "com.dez.bambustatus",
+  "Actions": [
+    {
+      "Name": "Printer Status",
+      "UUID": "com.dez.bambustatus.status",
+      "Icon": "imgs/actions/status/icon",
+      "Tooltip": "Print state and progress. Pick what shows big in the middle and small at the bottom.",
+      "PropertyInspectorPath": "ui/printer.html",
+      "Controllers": [
+        "Keypad",
+        "Encoder"
+      ],
+      "Encoder": {
+        "layout": "layouts/status.json",
+        "TriggerDescription": {
+          "Push": "Refresh / swap",
+          "Touch": "Refresh / swap"
+        }
+      },
+      "SupportedInMultiActions": false,
+      "States": [
+        {
+          "Image": "imgs/actions/status/key",
+          "ShowTitle": true
+        }
+      ]
+    },
+    {
+      "Name": "Printer Status + Light",
+      "UUID": "com.dez.bambustatus.statuslight",
+      "Icon": "imgs/actions/statuslight/icon",
+      "Tooltip": "Printer status with a light indicator. Press to toggle the chamber light.",
+      "PropertyInspectorPath": "ui/printer.html",
+      "Controllers": [
+        "Keypad",
+        "Encoder"
+      ],
+      "Encoder": {
+        "layout": "layouts/status.json",
+        "TriggerDescription": {
+          "Push": "Toggle light",
+          "Touch": "Toggle light"
+        }
+      },
+      "SupportedInMultiActions": false,
+      "States": [
+        {
+          "Image": "imgs/actions/statuslight/key",
+          "ShowTitle": true
+        }
+      ]
+    },
+    {
+      "Name": "Printer Light",
+      "UUID": "com.dez.bambustatus.light",
+      "Icon": "imgs/actions/light/icon",
+      "Tooltip": "Toggle the printer's chamber light.",
+      "PropertyInspectorPath": "ui/printer.html",
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": true,
+      "States": [
+        {
+          "Image": "imgs/actions/light/key",
+          "ShowTitle": true
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Bambu Status Plus</title>
+<style>
+  :root {
+    --bg: #2d2d2d; --field: #3d3d3d; --field-hi: #464646; --text: #d8d8d8; --muted: #969696;
+    --accent: #0078ff; --ok: #3ddc84; --bad: #ff6b6b; --line: #3a3a3a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font: 9pt "Segoe UI", system-ui, sans-serif; }
+  body { padding: 4px 14px 16px 6px; }
+  .row { display: flex; align-items: center; min-height: 30px; margin: 3px 0; }
+  .row > label:first-child { flex: 0 0 104px; text-align: right; padding-right: 10px; color: var(--muted); }
+  .row > .ctl { flex: 1; display: flex; align-items: center; gap: 6px; min-width: 0; }
+  select, input[type=text], input[type=password] {
+    width: 100%; height: 26px; background: var(--field); color: var(--text); border: 0; border-radius: 3px;
+    padding: 0 6px; font: inherit; outline: none;
+  }
+  select:focus, input:focus { background: var(--field-hi); }
+  input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; margin: 0; }
+  button {
+    height: 26px; min-width: 30px; background: var(--field); color: var(--text); border: 0; border-radius: 3px;
+    font: inherit; cursor: pointer; padding: 0 8px; white-space: nowrap;
+  }
+  button:hover { background: var(--field-hi); }
+  .hint { margin: -1px 0 6px 114px; color: var(--muted); font-size: 8pt; line-height: 1.35; }
+  .status { margin: 2px 0 8px 114px; font-size: 8pt; line-height: 1.35; color: var(--muted); }
+  .status.ok { color: var(--ok); } .status.bad { color: var(--bad); }
+  .section { border-top: 1px solid var(--line); margin-top: 8px; padding-top: 4px; }
+  .section-title { padding: 6px 0 4px 14px; font-weight: 600; }
+  .hidden { display: none !important; }
+  .swap { display: flex; margin: -2px 0 4px 114px; }
+</style>
+</head>
+<body>
+
+<!-- ======================= PRINTER ======================= -->
+<div class="row">
+  <label>Printer IP</label>
+  <div class="ctl"><input type="text" id="ip" placeholder="192.168.1.50" spellcheck="false" /></div>
+</div>
+<div class="row">
+  <label>Serial number</label>
+  <div class="ctl"><input type="text" id="serial" placeholder="01S00A..." spellcheck="false" /></div>
+</div>
+<div class="row">
+  <label>LAN access code</label>
+  <div class="ctl">
+    <input type="password" id="accessCode" placeholder="from the printer's screen" spellcheck="false" />
+    <button id="btnShow" title="Show / hide">👁</button>
+  </div>
+</div>
+<div class="hint">The access code is kept in the plugin's global settings, not in the key, so it isn't included when you export a profile.</div>
+<div class="status" id="status">Waiting for plugin…</div>
+
+<!-- ======================= DISPLAY (status keys) ======================= -->
+<div class="section" id="secDisplay">
+  <div class="section-title">Display</div>
+  <div class="row">
+    <label>Big (centre)</label>
+    <div class="ctl">
+      <select data-key="big">
+        <option value="percent">Percent complete (93%)</option>
+        <option value="remaining">Time remaining (3h 19m)</option>
+        <option value="finish">Finish time (4:35 PM)</option>
+        <option value="layer">Layer (120/240)</option>
+        <option value="none">Nothing</option>
+      </select>
+    </div>
+  </div>
+  <div class="row">
+    <label>Small (bottom)</label>
+    <div class="ctl">
+      <select data-key="small">
+        <option value="remaining">Time remaining (3h 19m)</option>
+        <option value="percent">Percent complete (93%)</option>
+        <option value="finish">Finish time (ETA 4:35 PM)</option>
+        <option value="layer">Layer (Layer 120/240)</option>
+        <option value="none">Nothing</option>
+      </select>
+    </div>
+  </div>
+  <div class="swap"><button id="btnSwap">⇅ Swap big and small</button></div>
+  <div class="row">
+    <label>State line</label>
+    <div class="ctl">
+      <input type="checkbox" data-key="showState" id="showState" />
+      <label for="showState" style="color:var(--muted)">Show PRINTING / PAUSED / … (off = bigger value)</label>
+    </div>
+  </div>
+  <div class="row">
+    <label>Time format</label>
+    <div class="ctl">
+      <select data-key="timeFormat">
+        <option value="hm">3h 19m · 11 min</option>
+        <option value="colon">3:19 · 0:11</option>
+      </select>
+      <select data-key="clock" style="flex:0 0 96px" title="Finish time clock">
+        <option value="12">12-hour</option>
+        <option value="24">24-hour</option>
+      </select>
+    </div>
+  </div>
+  <div class="row" id="rowPress">
+    <label>Key press</label>
+    <div class="ctl">
+      <select data-key="press">
+        <option value="refresh">Refresh now</option>
+        <option value="swap">Swap big and small</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+<!-- ======================= LIGHT ======================= -->
+<div class="section hidden" id="secLight">
+  <div class="section-title">Light</div>
+  <div class="row">
+    <label>Light</label>
+    <div class="ctl">
+      <select data-key="ledNode">
+        <option value="chamber_light">chamber_light — chamber light (most models)</option>
+        <option value="chamber_light2">chamber_light2 — second chamber light (H2D)</option>
+        <option value="work_light">work_light — alternate</option>
+      </select>
+    </div>
+  </div>
+  <div class="hint">Pressing the key toggles this light. If nothing happens on your model, try another option.</div>
+</div>
+
+<script>
+  const $ = (s) => document.querySelector(s);
+  const $$ = (s) => [...document.querySelectorAll(s)];
+  const DEFAULTS = { ip: "", serial: "", big: "percent", small: "remaining", showState: true, timeFormat: "hm", clock: "12", press: "refresh", ledNode: "chamber_light" };
+
+  let ws, ctx, actionUUID, settings = { ...DEFAULTS }, globalSettings = { credentials: {} };
+
+  window.connectElgatoStreamDeckSocket = (port, uuid, registerEvent, info, actionInfo) => {
+    ctx = uuid;
+    const ai = JSON.parse(actionInfo);
+    actionUUID = ai.action;
+    settings = Object.assign({}, DEFAULTS, ai.payload.settings || {});
+    const isLight = actionUUID.endsWith(".light");
+    const hasLight = isLight || actionUUID.endsWith(".statuslight");
+    $("#secDisplay").classList.toggle("hidden", isLight);
+    $("#secLight").classList.toggle("hidden", !hasLight);
+    $("#rowPress").classList.toggle("hidden", hasLight);
+    fillForm();
+
+    ws = new WebSocket("ws://127.0.0.1:" + port);
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ event: registerEvent, uuid }));
+      ws.send(JSON.stringify({ event: "getGlobalSettings", context: uuid }));
+      sendToPlugin({ cmd: "status" });
+    };
+    ws.onmessage = (e) => {
+      const msg = JSON.parse(e.data);
+      if (msg.event === "didReceiveSettings") {
+        settings = Object.assign({}, DEFAULTS, msg.payload.settings || {});
+        fillForm();
+      } else if (msg.event === "didReceiveGlobalSettings") {
+        globalSettings = msg.payload.settings || {};
+        if (!globalSettings.credentials || typeof globalSettings.credentials !== "object") globalSettings.credentials = {};
+        // Older keys may still carry the code in their own settings: move it to global.
+        if (settings.accessCode) { $("#accessCode").value = settings.accessCode; delete settings.accessCode; saveCode(); save(); }
+        else $("#accessCode").value = globalSettings.credentials[credKey()] || "";
+      } else if (msg.event === "sendToPropertyInspector") {
+        const p = msg.payload || {};
+        if (p.event === "status") {
+          const el = $("#status");
+          el.textContent = p.status;
+          el.className = "status " + (p.ok ? "ok" : "bad");
+        }
+      }
+    };
+  };
+
+  function send(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
+  function save() { send({ event: "setSettings", context: ctx, payload: settings }); }
+  function sendToPlugin(payload) { send({ event: "sendToPlugin", action: actionUUID, context: ctx, payload }); }
+  function credKey() { return settings.ip && settings.serial ? settings.ip + "|" + settings.serial : ""; }
+  function saveCode() {
+    const k = credKey();
+    if (!k) return;
+    globalSettings.credentials[k] = $("#accessCode").value.trim();
+    send({ event: "setGlobalSettings", context: ctx, payload: globalSettings });
+  }
+
+  function fillForm() {
+    $("#ip").value = settings.ip || "";
+    $("#serial").value = settings.serial || "";
+    $$("[data-key]").forEach((el) => {
+      const v = settings[el.dataset.key];
+      if (el.type === "checkbox") el.checked = v === true || v === "true";
+      else el.value = v ?? "";
+    });
+  }
+
+  // Printer identity: the code follows the printer when IP / serial are edited.
+  for (const id of ["ip", "serial"]) {
+    $("#" + id).addEventListener("change", (e) => {
+      settings[id] = e.target.value.trim().replace(id === "serial" ? /[a-z]/g : /$^/, (c) => c.toUpperCase());
+      e.target.value = settings[id];
+      saveCode();
+      save();
+    });
+  }
+  $("#accessCode").addEventListener("change", () => { saveCode(); save(); });
+  $("#btnShow").addEventListener("click", () => {
+    const f = $("#accessCode");
+    f.type = f.type === "password" ? "text" : "password";
+  });
+
+  $$("[data-key]").forEach((el) => {
+    el.addEventListener("change", () => {
+      settings[el.dataset.key] = el.type === "checkbox" ? el.checked : el.value;
+      save();
+    });
+  });
+
+  $("#btnSwap").addEventListener("click", () => {
+    if (settings.small === "none") return;
+    [settings.big, settings.small] = [settings.small, settings.big];
+    fillForm();
+    save();
+  });
+</script>
+</body>
+</html>

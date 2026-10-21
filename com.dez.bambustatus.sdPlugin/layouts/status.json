@@ -1,0 +1,24 @@
+{
+  "$schema": "https://schemas.elgato.com/streamdeck/plugins/layout.json",
+  "id": "com.dez.bambustatus.layout",
+  "items": [
+    { "key": "background", "type": "text", "rect": [0, 0, 200, 100], "value": "", "background": "0:#303235,1:#17191B", "zOrder": 0 },
+    {
+      "key": "status", "type": "text", "rect": [10, 5, 154, 26], "value": "BAMBU - CONNECTING", "color": "#B5B8B7",
+      "font": { "size": 16, "weight": 800 }, "alignment": "left", "text-overflow": "ellipsis", "zOrder": 1
+    },
+    { "key": "light", "type": "pixmap", "rect": [168, 4, 24, 27], "value": "", "zOrder": 1 },
+    {
+      "key": "big", "type": "text", "rect": [10, 32, 106, 38], "value": "--", "color": "#FFFFFF",
+      "font": { "size": 30, "weight": 800 }, "alignment": "left", "text-overflow": "ellipsis", "zOrder": 1
+    },
+    {
+      "key": "small", "type": "text", "rect": [118, 39, 74, 26], "value": "", "color": "#D7DEDB",
+      "font": { "size": 17, "weight": 700 }, "alignment": "right", "text-overflow": "ellipsis", "zOrder": 1
+    },
+    {
+      "key": "progress", "type": "bar", "rect": [10, 76, 182, 14], "value": 0, "range": { "min": 0, "max": 100 },
+      "subtype": 0, "border_w": 1, "bar_bg_c": "#343A3D", "bar_border_c": "#59615F", "bar_fill_c": "#B5B8B7", "zOrder": 1
+    }
+  ]
+}

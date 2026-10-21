@@ -1,0 +1,11 @@
+# Node.js
+node_modules/
+
+# Build output
+*.sdPlugin/bin/
+*.sdPlugin/logs
+dist/
+tools/out/
+
+# Claude Code local settings (machine-specific tool permissions)
+.claude/settings.local.json

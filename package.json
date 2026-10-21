@@ -1,0 +1,29 @@
+{
+  "name": "bambu-status-plus",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Stream Deck plugin: Bambu Lab printer status with a progress border, and a choice of which value (percent, time left, finish time, layer) goes big in the middle.",
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "typecheck": "tsc --noEmit -p .",
+    "icons": "node tools/icons.mjs",
+    "test:render": "node tools/harness.mjs",
+    "pack": "node build.mjs && streamdeck pack com.dez.bambustatus.sdPlugin --output dist --force"
+  },
+  "dependencies": {
+    "@elgato/streamdeck": "^3.0.3",
+    "mqtt": "^5.16.1"
+  },
+  "devDependencies": {
+    "@elgato/cli": "^1.10.3",
+    "@resvg/resvg-js": "^2.6.2",
+    "@types/node": "^26.6.5",
+    "aedes": "^1.2.0",
+    "esbuild": "^0.28.2",
+    "selfsigned": "^5.5.0",
+    "typescript": "^7.0.2",
+    "ws": "^8.22.0"
+  }
+}
