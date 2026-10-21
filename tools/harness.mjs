@@ -12,20 +12,31 @@ const SD_PORT = 28124;
 const MQTT_PORT = 18883;
 const CODE = "12345678";
 const STATUS = "com.dez.bambustatus.status";
-const STATUSLIGHT = "com.dez.bambustatus.statuslight";
-const LIGHT = "com.dez.bambustatus.light";
 const mins = (m) => m;
 
 // ---------------------------------------------------------------- fake printers (one serial per scenario)
+const tray = (id, type, color, remain = 80) => ({ id: String(id), tray_type: type, tray_color: color, remain });
+const AMS2 = {
+	ams: [
+		{ id: "0", humidity: "2", humidity_raw: "18", temp: "26.4", tray: [tray(0, "PLA", "FFFFFFFF", 92), tray(1, "PLA", "000000FF", 40), tray(2, "PETG", "F95D73FF", 15), tray(3, "PLA", "00AE42FF", -1)] },
+		{ id: "1", humidity: "4", tray: [tray(0, "ABS", "FFC800FF", 60), { id: "1" }, tray(2, "TPU", "0A2989FF", 100), tray(3, "PLA-S", "8E9089FF", 5)] },
+		{ id: "128", humidity_raw: "9", temp: "55.0", tray: [tray(0, "PA-CF", "3B3B3BFF", 70)] },
+	],
+	tray_now: "1",
+};
+const TEMPS = { nozzle_temper: 219.6, nozzle_target_temper: 220, bed_temper: 64.8, bed_target_temper: 65, chamber_temper: 38 };
+// H2-style report: temperatures packed (target << 16 | current) under device.*
+const H2 = { device: { extruder: { info: [{ id: 0, temp: (250 << 16) | 248 }] }, bed: { info: { temp: (90 << 16) | 89 } }, ctc: { info: { temp: 45 } } } };
 const printers = {
-	P93: { gcode_state: "RUNNING", mc_percent: 93, mc_remaining_time: mins(11), layer_num: 220, total_layer_num: 236, stg_cur: 0 },
+	P93: { gcode_state: "RUNNING", mc_percent: 93, mc_remaining_time: mins(11), layer_num: 220, total_layer_num: 236, stg_cur: 0, ams: AMS2, ...TEMPS },
+	H2: { gcode_state: "RUNNING", mc_percent: 47, mc_remaining_time: 80, ...H2, ams: { ams: [AMS2.ams[0]], tray_now: "2" } },
+	IDLEAMS: { gcode_state: "IDLE", ams: { ams: [AMS2.ams[0]], tray_now: "255" }, nozzle_temper: 28, nozzle_target_temper: 0, bed_temper: 25, bed_target_temper: 0 },
 	P32: { gcode_state: "RUNNING", mc_percent: 32, mc_remaining_time: mins(199), layer_num: 61, total_layer_num: 190, stg_cur: 0 },
 	PAUSE: { gcode_state: "PAUSE", mc_percent: 57, mc_remaining_time: 48, layer_num: 80, total_layer_num: 140 },
 	DONE: { gcode_state: "FINISH", mc_percent: 100, mc_remaining_time: 0, layer_num: 140, total_layer_num: 140 },
 	PREP: { gcode_state: "RUNNING", mc_percent: 0, mc_remaining_time: 95, stg_cur: 2 },
 	FAIL: { gcode_state: "FAILED", mc_percent: 12, print_error: 50348044 + 1 }, // 0x0300400D
-	IDLE: { gcode_state: "IDLE", mc_percent: 0, mc_remaining_time: 0, lights_report: [{ node: "chamber_light", mode: "off" }] },
-	LIT: { gcode_state: "RUNNING", mc_percent: 64, mc_remaining_time: 75, lights_report: [{ node: "chamber_light", mode: "on" }] },
+	IDLE: { gcode_state: "IDLE", mc_percent: 0, mc_remaining_time: 0 },
 };
 
 const scenarios = [
@@ -41,8 +52,14 @@ const scenarios = [
 	["09-preparing", STATUS, "PREP", { big: "remaining" }, "H2D"],
 	["10-error", STATUS, "FAIL", {}, "X1C"],
 	["11-idle", STATUS, "IDLE", {}, "H2S"],
-	["12-status-light", STATUSLIGHT, "LIT", { big: "remaining", small: "percent" }, "H2S"],
-	["13-light-toggle", LIGHT, "IDLE", {}, "H2S"],
+	["12-ams", STATUS, "P93", { pageStatus: false, pageTemps: false }, "H2S"],
+	["13-ams-remain", STATUS, "P93", { pageStatus: false, pageTemps: false, amsView: "remain" }, "H2S"],
+	["17-ams-idle", STATUS, "IDLEAMS", { pageStatus: false, pageTemps: false }, "P2S"],
+	["18-no-ams", STATUS, "IDLE", { pageStatus: false, pageTemps: false }, "A1"],
+	["19-temps", STATUS, "P93", { pageStatus: false, pageAms: false }, "H2S"],
+	["20-temps-h2-F", STATUS, "H2", { pageStatus: false, pageAms: false, tempUnit: "F" }, "H2D"],
+	["21-temps-idle", STATUS, "IDLEAMS", { pageStatus: false, pageAms: false }, "P2S"],
+	["cycle", STATUS, "P93", {}, "H2S"],
 	["14-bad-code", STATUS, "P93", { _badCode: true }, "H2S"],
 	["15-no-settings", STATUS, "", {}, ""],
 	["16-dial", STATUS, "P32", { big: "remaining", small: "percent" }, "H2S", "Encoder"],
@@ -68,13 +85,8 @@ broker.on("publish", (packet, client) => {
 	const serial = m[1];
 	const msg = JSON.parse(packet.payload.toString());
 	if (msg.pushing?.command === "pushall") pub(serial, printers[serial] ?? {});
-	if (msg.system?.command === "ledctrl") {
-		printers[serial].lights_report = [{ node: msg.system.led_node, mode: msg.system.led_mode }];
-		ledCommands.push(`${serial}:${msg.system.led_node}=${msg.system.led_mode}`);
-		pub(serial, { lights_report: printers[serial].lights_report });
-	}
 });
-const ledCommands = [];
+const cycleShots = [];
 const pems = await generate([{ name: "commonName", value: "fake-bambu" }]);
 const mqttServer = tls.createServer({ key: pems.private, cert: pems.cert }, broker.handle).listen(MQTT_PORT);
 
@@ -118,8 +130,13 @@ function start() {
 			send({ action, event: "titleParametersDidChange", context: name, device: "dev1",
 				payload: { ...payload, state: 0, title, titleParameters: { showTitle: true, fontFamily: "", fontSize: 12, fontStyle: "", fontUnderline: false, titleAlignment: "bottom", titleColor: "#ffffff" } } });
 	}
-	// press the light key (off -> on), then ask for PI status of the time-big key
-	setTimeout(() => send({ action: LIGHT, event: "keyDown", context: "13-light-toggle", device: "dev1", payload: { settings: { ip: "127.0.0.1", serial: "IDLE" }, coordinates: { column: 0, row: 0 }, isInMultiAction: false } }), 2500);
+	// press the "cycle" key: Status -> AMS 1 -> AMS 2 -> AMS HT -> Temps -> Status, capturing each page
+	for (let i = 0; i < 5; i++)
+		setTimeout(() => {
+			cycleShots.push(images.cycle);
+			send({ action: STATUS, event: "keyDown", context: "cycle", device: "dev1", payload: { settings: {}, coordinates: { column: 0, row: 0 }, isInMultiAction: false } });
+		}, 1500 + i * 200);
+	setTimeout(() => cycleShots.push(images.cycle), 2700);
 	setTimeout(() => {
 		send({ action: STATUS, event: "propertyInspectorDidAppear", context: "02-time-big", device: "dev1" });
 		send({ action: STATUS, event: "sendToPlugin", context: "02-time-big", payload: { cmd: "status" } });
@@ -143,15 +160,15 @@ const child = spawn(process.execPath, ["bin/plugin.js", "-port", String(SD_PORT)
 function finish() {
 	fs.mkdirSync("tools/out", { recursive: true });
 	const cells = [];
-	for (const [name] of scenarios) {
-		const img = images[name];
+	const shots = [...scenarios.filter(([n]) => n !== "cycle").map(([n]) => [n, images[n]]), ...cycleShots.map((img, i) => [`cycle-${i}`, img])];
+	for (const [name, img] of shots) {
 		if (!img) continue;
 		const svg = decodeURIComponent(img.replace(/^data:image\/svg\+xml;charset=utf8,/, ""));
 		fs.writeFileSync(`tools/out/${name}.svg`, svg);
 		fs.writeFileSync(`tools/out/${name}.png`, new Resvg(svg, { fitTo: { mode: "width", value: 144 }, font: { loadSystemFonts: true } }).render().asPng());
 		cells.push([name, svg.replace(/id="bg"/g, `id="bg${cells.length}"`).replace(/url\(#bg\)/g, `url(#bg${cells.length})`)]);
 	}
-	const cols = 5;
+	const cols = 6;
 	const rows = Math.ceil(cells.length / cols);
 	const sheet = `<svg xmlns="http://www.w3.org/2000/svg" width="${cols * 160}" height="${rows * 172}"><rect width="100%" height="100%" fill="#222"/>${cells
 		.map(([name, svg], i) => {
@@ -164,7 +181,6 @@ function finish() {
 	console.log("images:", cells.map(([n]) => n).join(", "));
 	console.log("missing:", scenarios.map(([n]) => n).filter((n) => !images[n] && !feedback[n]).join(", ") || "none");
 	console.log("dial feedback:", JSON.stringify(feedback["16-dial"]));
-	console.log("LED commands:", ledCommands.join(", ") || "none");
 	console.log("PI msgs:", JSON.stringify(toPI.slice(-2)));
 	child.kill();
 	wss.close();

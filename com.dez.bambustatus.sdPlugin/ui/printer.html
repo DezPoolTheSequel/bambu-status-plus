@@ -31,6 +31,8 @@
   .section { border-top: 1px solid var(--line); margin-top: 8px; padding-top: 4px; }
   .section-title { padding: 6px 0 4px 14px; font-weight: 600; }
   .hidden { display: none !important; }
+  .checks { gap: 14px !important; }
+  .checks label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
   .swap { display: flex; margin: -2px 0 4px 114px; }
 </style>
 </head>
@@ -55,9 +57,23 @@
 <div class="hint">The access code is kept in the plugin's global settings, not in the key, so it isn't included when you export a profile.</div>
 <div class="status" id="status">Waiting for plugin…</div>
 
-<!-- ======================= DISPLAY (status keys) ======================= -->
+<!-- ======================= PAGES ======================= -->
+<div class="section">
+  <div class="section-title">Pages</div>
+  <div class="row">
+    <label>Show</label>
+    <div class="ctl checks">
+      <label><input type="checkbox" data-key="pageStatus" /> Status</label>
+      <label><input type="checkbox" data-key="pageAms" /> AMS</label>
+      <label><input type="checkbox" data-key="pageTemps" /> Temperature</label>
+    </div>
+  </div>
+  <div class="hint">Press the key to flip to the next page. On the AMS page, each press shows the next AMS unit before moving on.</div>
+</div>
+
+<!-- ======================= STATUS PAGE ======================= -->
 <div class="section" id="secDisplay">
-  <div class="section-title">Display</div>
+  <div class="section-title">Status page</div>
   <div class="row">
     <label>Big (centre)</label>
     <div class="ctl">
@@ -103,37 +119,35 @@
       </select>
     </div>
   </div>
-  <div class="row" id="rowPress">
-    <label>Key press</label>
-    <div class="ctl">
-      <select data-key="press">
-        <option value="refresh">Refresh now</option>
-        <option value="swap">Swap big and small</option>
-      </select>
-    </div>
-  </div>
 </div>
 
-<!-- ======================= LIGHT ======================= -->
-<div class="section hidden" id="secLight">
-  <div class="section-title">Light</div>
+<!-- ======================= AMS / TEMPERATURE ======================= -->
+<div class="section">
+  <div class="section-title">AMS &amp; temperature pages</div>
   <div class="row">
-    <label>Light</label>
+    <label>AMS slots show</label>
     <div class="ctl">
-      <select data-key="ledNode">
-        <option value="chamber_light">chamber_light — chamber light (most models)</option>
-        <option value="chamber_light2">chamber_light2 — second chamber light (H2D)</option>
-        <option value="work_light">work_light — alternate</option>
+      <select data-key="amsView">
+        <option value="material">Material (PLA, PETG…)</option>
+        <option value="remain">Remaining %</option>
       </select>
     </div>
   </div>
-  <div class="hint">Pressing the key toggles this light. If nothing happens on your model, try another option.</div>
+  <div class="row">
+    <label>Temperature</label>
+    <div class="ctl">
+      <select data-key="tempUnit">
+        <option value="C">°C Celsius</option>
+        <option value="F">°F Fahrenheit</option>
+      </select>
+    </div>
+  </div>
 </div>
 
 <script>
   const $ = (s) => document.querySelector(s);
   const $$ = (s) => [...document.querySelectorAll(s)];
-  const DEFAULTS = { ip: "", serial: "", big: "percent", small: "remaining", showState: true, timeFormat: "hm", clock: "12", press: "refresh", ledNode: "chamber_light" };
+  const DEFAULTS = { ip: "", serial: "", big: "percent", small: "remaining", showState: true, timeFormat: "hm", clock: "12", pageStatus: true, pageAms: true, pageTemps: true, amsView: "material", tempUnit: "C" };
 
   let ws, ctx, actionUUID, settings = { ...DEFAULTS }, globalSettings = { credentials: {} };
 
@@ -142,11 +156,6 @@
     const ai = JSON.parse(actionInfo);
     actionUUID = ai.action;
     settings = Object.assign({}, DEFAULTS, ai.payload.settings || {});
-    const isLight = actionUUID.endsWith(".light");
-    const hasLight = isLight || actionUUID.endsWith(".statuslight");
-    $("#secDisplay").classList.toggle("hidden", isLight);
-    $("#secLight").classList.toggle("hidden", !hasLight);
-    $("#rowPress").classList.toggle("hidden", hasLight);
     fillForm();
 
     ws = new WebSocket("ws://127.0.0.1:" + port);

@@ -12,16 +12,10 @@ const printer = (c) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 
  <rect x="14" y="24" width="12" height="4" rx="1" fill="${c}"/>
  <path d="M 9 30 H 31" stroke="${c}" stroke-width="2.6" stroke-linecap="round"/>
 </svg>`;
-const bulbGlyph = (c) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">
- <circle cx="20" cy="16" r="9" fill="none" stroke="${c}" stroke-width="2.6"/>
- <path d="M 15 27 H 25 M 16 32 H 24" stroke="${c}" stroke-width="2.6" stroke-linecap="round"/>
-</svg>`;
 const both2 = (svg, base) => (png(svg, 20, `${base}.png`), png(svg, 40, `${base}@2x.png`));
 png(printer("#FFFFFF"), 28, `${out}/plugin/category-icon.png`);
 png(printer("#FFFFFF"), 56, `${out}/plugin/category-icon@2x.png`);
 both2(printer("#FFFFFF"), `${out}/actions/status/icon`);
-both2(bulbGlyph("#FFFFFF"), `${out}/actions/light/icon`);
-both2(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><g transform="translate(0 8) scale(.78)">${printer("#FFFFFF").replace(/<\/?svg[^>]*>/g, "")}</g><g transform="translate(24 -1) scale(.42)">${bulbGlyph("#FFFFFF").replace(/<\/?svg[^>]*>/g, "")}</g></svg>`, `${out}/actions/statuslight/icon`);
 
 // Colour key images: a printer with the progress border, like the live key
 const R = 22;
@@ -35,16 +29,10 @@ const key = (inner, accent = "#F0857C", pct = 65, bg1 = "#452321", bg2 = "#160C0
  ${inner}
 </svg>`;
 const printerArt = `<g transform="translate(32 30) scale(2)">${printer("#FFFFFF").replace(/<\/?svg[^>]*>/g, "")}</g>`;
-const bulbArt = (on) => `<g transform="translate(28 22) scale(2.2)">
- <circle cx="20" cy="16" r="9" fill="${on ? "#FFD34D" : "#6E7575"}" stroke="${on ? "#FFF1A6" : "#B4B9B8"}" stroke-width="2"/>
- <path d="M 15.5 26 H 24.5 L 23 31 H 17 Z" fill="${on ? "#E6A92D" : "#555B5B"}"/>
- <path d="M 17 34 H 23" stroke="${on ? "#FFD34D" : "#89908F"}" stroke-width="2" stroke-linecap="round"/></g>`;
 const pctText = `<text x="72" y="122" fill="#FFFFFF" font-family="Arial" font-weight="900" font-size="20" text-anchor="middle">65%</text>`;
 
 const statusKey = key(`<g transform="translate(0 -8)">${printerArt}</g>${pctText}`);
 both(statusKey, 72, `${out}/actions/status/key`);
-both(key(`<g transform="translate(-4 -8)">${printerArt}</g><g transform="translate(96 16) scale(.8)">${bulbArt(true).replace("translate(28 22) scale(2.2)", "scale(1)")}</g>${pctText}`), 72, `${out}/actions/statuslight/key`);
-both(key(bulbArt(true), "#FFD34D", 100, "#423B16", "#171407"), 72, `${out}/actions/light/key`);
 
 // Marketplace / plugin icon
 both(statusKey, 288, `${out}/plugin/marketplace`);

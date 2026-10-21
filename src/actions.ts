@@ -15,8 +15,8 @@ import streamDeck, {
 } from "@elgato/streamdeck";
 import type { JsonObject, JsonValue } from "@elgato/utils";
 import { hub, type Printer, type Snapshot } from "./printer.js";
-import { dialFeedback, renderLight, renderStatus, toDataUrl } from "./render.js";
-import { printerKey, resolveSettings, type ActionSettings, type GlobalSettings } from "./settings.js";
+import { dialFeedback, renderAms, renderStatus, renderTemps, toDataUrl } from "./render.js";
+import { pagesFor, printerKey, resolveSettings, type ActionSettings, type GlobalSettings, type Page } from "./settings.js";
 
 const log = () => streamDeck.logger.createScope("bambu");
 
@@ -34,7 +34,7 @@ export function setCredentials(g: Partial<GlobalSettings> | undefined): void {
 
 const codeFor = (s: ActionSettings) => String(credentials[printerKey(s)] ?? "").trim();
 
-// ---------------------------------------------------------------- base action
+// ---------------------------------------------------------------- action
 
 interface Instance {
 	action: KeyAction<JsonObject> | DialAction<JsonObject>;
@@ -43,17 +43,29 @@ interface Instance {
 	showLabel: boolean;
 	printer?: Printer;
 	listener?: (snap: Snapshot) => void;
+	page: Page;
+	amsIndex: number;
 	lastImage?: string;
 	lastFeedback?: string;
-	lastLightPress?: number;
 }
 
-const NOT_SET_UP: Snapshot = { state: "OFFLINE", percent: 0, remaining: 0, finishAt: 0, layer: 0, totalLayers: 0, reason: "SETTINGS REQUIRED", lights: {} };
+const NOT_SET_UP: Snapshot = {
+	state: "OFFLINE",
+	percent: 0,
+	remaining: 0,
+	finishAt: 0,
+	layer: 0,
+	totalLayers: 0,
+	reason: "SETTINGS REQUIRED",
+	temps: {},
+	ams: [],
+	activeTray: -1,
+};
 
-abstract class BambuAction extends SingletonAction<JsonObject> {
-	protected items = new Map<string, Instance>();
+@action({ UUID: "com.dez.bambustatus.status" })
+export class PrinterStatus extends SingletonAction<JsonObject> {
+	private items = new Map<string, Instance>();
 	private piActionId?: string;
-	protected abstract readonly fallbackLabel: string;
 
 	constructor() {
 		super();
@@ -62,15 +74,15 @@ abstract class BambuAction extends SingletonAction<JsonObject> {
 		});
 	}
 
-	protected abstract draw(it: Instance, snap: Snapshot): Promise<void>;
-	protected abstract press(it: Instance): Promise<void>;
-
 	override async onWillAppear(ev: WillAppearEvent<JsonObject>): Promise<void> {
+		const settings = resolveSettings(ev.payload.settings);
 		const it: Instance = {
 			action: ev.action as Instance["action"],
-			settings: resolveSettings(ev.payload.settings),
-			label: this.fallbackLabel,
+			settings,
+			label: "BAMBU",
 			showLabel: true,
+			page: pagesFor(settings)[0],
+			amsIndex: 0,
 		};
 		this.items.set(ev.action.id, it);
 		if (ev.action.isKey()) await ev.action.setTitle("");
@@ -89,6 +101,11 @@ abstract class BambuAction extends SingletonAction<JsonObject> {
 		const it = this.items.get(ev.action.id);
 		if (!it) return;
 		it.settings = resolveSettings(ev.payload.settings);
+		const pages = pagesFor(it.settings);
+		if (!pages.includes(it.page)) {
+			it.page = pages[0];
+			it.amsIndex = 0;
+		}
 		this.attach(it);
 	}
 
@@ -96,7 +113,7 @@ abstract class BambuAction extends SingletonAction<JsonObject> {
 		const it = this.items.get(ev.action.id);
 		if (!it) return;
 		// The title is drawn inside the image (top-left, in the state colour), so hide Stream Deck's own.
-		it.label = String(ev.payload.title ?? "").trim() || this.fallbackLabel;
+		it.label = String(ev.payload.title ?? "").trim() || "BAMBU";
 		it.showLabel = ev.payload.titleParameters?.showTitle !== false;
 		if (ev.action.isKey() && ev.payload.title) await ev.action.setTitle("");
 		await this.redraw(it);
@@ -104,17 +121,17 @@ abstract class BambuAction extends SingletonAction<JsonObject> {
 
 	override async onKeyDown(ev: KeyDownEvent<JsonObject>): Promise<void> {
 		const it = this.items.get(ev.action.id);
-		if (it) await this.press(it);
+		if (it) await this.nextPage(it);
 	}
 
 	override async onDialDown(ev: DialDownEvent<JsonObject>): Promise<void> {
 		const it = this.items.get(ev.action.id);
-		if (it) await this.press(it);
+		if (it) await this.refresh(it);
 	}
 
 	override async onTouchTap(ev: TouchTapEvent<JsonObject>): Promise<void> {
 		const it = this.items.get(ev.action.id);
-		if (it) await this.press(it);
+		if (it) await this.refresh(it);
 	}
 
 	override onPropertyInspectorDidAppear(ev: PropertyInspectorDidAppearEvent<JsonObject>): void {
@@ -130,10 +147,33 @@ abstract class BambuAction extends SingletonAction<JsonObject> {
 		}
 	}
 
+	// ------------------------------------------------------------------ pages
+
+	/** Status → AMS 1 → AMS 2 → … → Temperature → Status, skipping pages that are switched off. */
+	private async nextPage(it: Instance): Promise<void> {
+		const pages = pagesFor(it.settings);
+		const units = this.snapshot(it).ams.length;
+		if (it.page === "ams" && it.amsIndex < units - 1) {
+			it.amsIndex++;
+		} else if (pages.length > 1) {
+			it.page = pages[(pages.indexOf(it.page) + 1) % pages.length];
+			it.amsIndex = 0;
+		} else {
+			// Only one screen and nothing to cycle: a press just asks the printer for fresh data.
+			it.amsIndex = 0;
+			await this.refresh(it);
+		}
+		await this.redraw(it);
+	}
+
+	private async refresh(it: Instance): Promise<void> {
+		if (!it.printer?.pushAll()) await it.action.showAlert();
+	}
+
 	// ------------------------------------------------------------------ internals
 
 	/** (Re)connect this key to the right printer for its current settings + credentials. */
-	protected attach(it: Instance): void {
+	private attach(it: Instance): void {
 		const code = codeFor(it.settings);
 		const ready = !!(printerKey(it.settings) && code);
 		const p = ready ? hub.acquire(it.action.id, it.settings.ip, it.settings.serial, code) : undefined;
@@ -156,7 +196,7 @@ abstract class BambuAction extends SingletonAction<JsonObject> {
 		it.listener = undefined;
 	}
 
-	protected snapshot(it: Instance): Snapshot {
+	private snapshot(it: Instance): Snapshot {
 		if (!it.printer) {
 			const missing = !it.settings.ip || !it.settings.serial ? "SETTINGS REQUIRED" : "ACCESS CODE REQUIRED";
 			return { ...NOT_SET_UP, reason: missing };
@@ -164,7 +204,7 @@ abstract class BambuAction extends SingletonAction<JsonObject> {
 		return it.printer.snapshot();
 	}
 
-	protected redraw(it: Instance): Promise<void> {
+	private redraw(it: Instance): Promise<void> {
 		return this.update(it, this.snapshot(it));
 	}
 
@@ -178,37 +218,27 @@ abstract class BambuAction extends SingletonAction<JsonObject> {
 		await this.sendStatus(it, snap);
 	}
 
-	protected async setImage(it: Instance, svg: string): Promise<void> {
-		if (!it.action.isKey()) return;
-		const img = toDataUrl(svg);
-		if (img === it.lastImage) return;
-		it.lastImage = img;
-		await it.action.setImage(img);
-	}
-
-	protected async setFeedback(it: Instance, fb: Record<string, unknown>): Promise<void> {
-		if (!it.action.isDial()) return;
-		const json = JSON.stringify(fb);
-		if (json === it.lastFeedback) return;
-		it.lastFeedback = json;
-		await it.action.setFeedback(fb as Parameters<DialAction<JsonObject>["setFeedback"]>[0]);
-	}
-
-	protected lightMode(it: Instance, snap: Snapshot): "on" | "off" | "unknown" {
-		return snap.lights[it.settings.ledNode.toLowerCase()] ?? "unknown";
-	}
-
-	protected async toggleLight(it: Instance): Promise<void> {
-		const now = Date.now();
-		if (now - (it.lastLightPress ?? 0) < 900) return; // ignore double taps while the printer catches up
-		it.lastLightPress = now;
-		const p = it.printer;
-		if (!p?.connected) {
-			await it.action.showAlert();
-			return;
+	private async draw(it: Instance, snap: Snapshot): Promise<void> {
+		const view = { label: it.label, showLabel: it.showLabel };
+		if (it.action.isKey()) {
+			if (it.amsIndex >= snap.ams.length) it.amsIndex = 0; // a unit went away
+			const svg =
+				it.page === "ams"
+					? renderAms(snap, it.settings, view, it.amsIndex)
+					: it.page === "temps"
+						? renderTemps(snap, it.settings, view)
+						: renderStatus(snap, it.settings, view);
+			const img = toDataUrl(svg);
+			if (img === it.lastImage) return;
+			it.lastImage = img;
+			await it.action.setImage(img);
+		} else if (it.action.isDial()) {
+			const fb = dialFeedback(snap, it.settings, it.label);
+			const json = JSON.stringify(fb);
+			if (json === it.lastFeedback) return;
+			it.lastFeedback = json;
+			await it.action.setFeedback(fb as Parameters<DialAction<JsonObject>["setFeedback"]>[0]);
 		}
-		const on = this.lightMode(it, p.snapshot()) !== "on";
-		if (!p.setLight(it.settings.ledNode, on)) await it.action.showAlert();
 	}
 
 	private async sendStatus(it: Instance, snap: Snapshot): Promise<void> {
@@ -218,65 +248,13 @@ abstract class BambuAction extends SingletonAction<JsonObject> {
 		if (snap.state === "CONNECTING") status = `Connecting to ${it.settings.ip}…`;
 		else if (!ok) status = `Not connected — ${snap.reason.toLowerCase()}`;
 		else {
-			const light = this.lightMode(it, snap);
-			status = `Connected — ${snap.state.toLowerCase()}${snap.percent && snap.state !== "IDLE" ? ` ${Math.round(snap.percent)}%` : ""}${light !== "unknown" ? `, light ${light}` : ""}`;
+			const ams = snap.ams.length ? `, ${snap.ams.length} AMS unit${snap.ams.length > 1 ? "s" : ""}` : "";
+			status = `Connected — ${snap.state.toLowerCase()}${snap.percent && snap.state !== "IDLE" ? ` ${Math.round(snap.percent)}%` : ""}${ams}`;
 		}
 		try {
 			await streamDeck.ui.sendToPropertyInspector({ event: "status", ok, status });
 		} catch {
 			/* PI closed */
 		}
-	}
-}
-
-// ---------------------------------------------------------------- the three actions
-
-@action({ UUID: "com.dez.bambustatus.status" })
-export class PrinterStatus extends BambuAction {
-	protected readonly fallbackLabel = "BAMBU";
-
-	protected async draw(it: Instance, snap: Snapshot): Promise<void> {
-		await this.setImage(it, renderStatus(snap, it.settings, { label: it.label, showLabel: it.showLabel }));
-		await this.setFeedback(it, dialFeedback(snap, it.settings, it.label));
-	}
-
-	protected async press(it: Instance): Promise<void> {
-		if (it.settings.press === "swap" && it.settings.small !== "none") {
-			const raw = { ...it.settings, big: it.settings.small, small: it.settings.big };
-			it.settings = resolveSettings(raw);
-			await it.action.setSettings(raw as JsonObject);
-			await this.redraw(it);
-			return;
-		}
-		if (!it.printer?.pushAll()) await it.action.showAlert();
-	}
-}
-
-@action({ UUID: "com.dez.bambustatus.statuslight" })
-export class PrinterStatusLight extends BambuAction {
-	protected readonly fallbackLabel = "BAMBU";
-
-	protected async draw(it: Instance, snap: Snapshot): Promise<void> {
-		const light = this.lightMode(it, snap) === "on" ? "on" : "off";
-		await this.setImage(it, renderStatus(snap, it.settings, { label: it.label, showLabel: it.showLabel, light }));
-		await this.setFeedback(it, dialFeedback(snap, it.settings, it.label, light));
-	}
-
-	protected press(it: Instance): Promise<void> {
-		return this.toggleLight(it);
-	}
-}
-
-@action({ UUID: "com.dez.bambustatus.light" })
-export class PrinterLight extends BambuAction {
-	protected readonly fallbackLabel = "LIGHT";
-
-	protected async draw(it: Instance, snap: Snapshot): Promise<void> {
-		const offline = snap.state === "OFFLINE" || snap.state === "CONNECTING";
-		await this.setImage(it, renderLight(this.lightMode(it, snap), it.label, it.showLabel, offline));
-	}
-
-	protected press(it: Instance): Promise<void> {
-		return this.toggleLight(it);
 	}
 }

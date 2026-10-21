@@ -15,7 +15,36 @@ export interface Snapshot {
 	totalLayers: number;
 	/** set for ERROR ("CODE 0300400C") and OFFLINE ("NO CONNECTION", "CHECK ACCESS CODE") */
 	reason: string;
-	lights: Record<string, "on" | "off">;
+	temps: Temps;
+	ams: AmsUnit[];
+	/** global index of the slot feeding the nozzle (unit * 4 + slot), -1 for none */
+	activeTray: number;
+}
+
+export interface Temps {
+	nozzle?: number;
+	nozzleTarget?: number;
+	bed?: number;
+	bedTarget?: number;
+	chamber?: number;
+}
+
+export interface AmsTray {
+	empty: boolean;
+	/** "#RRGGBB" */
+	color: string;
+	material: string;
+	/** 0-100, or -1 when the AMS doesn't know (non-Bambu spool) */
+	remain: number;
+}
+
+export interface AmsUnit {
+	id: number;
+	/** AMS HT has one slot, AMS / AMS 2 Pro / AMS lite have four */
+	trays: AmsTray[];
+	humidity?: number; // %
+	humidityLevel?: number; // 1 (dry) - 5 (wet), older firmware only reports this
+	temp?: number;
 }
 
 /** Port is only overridable so the test harness can point the plugin at a local fake printer. */
@@ -23,6 +52,83 @@ const PORT = Number(process.env.BAMBU_MQTT_PORT) || 8883;
 const PUSHALL_EVERY = 5 * 60_000; // Bambu asks clients not to request full reports more often than this
 
 const CANCEL_CODES = ["0300400C", "0500400E"];
+
+const isObj = (v: unknown): v is Record<string, any> => !!v && typeof v === "object" && !Array.isArray(v);
+
+/** Reports are partial: merge objects, replace arrays (except AMS units/trays, merged by id). */
+function merge(base: Record<string, any>, patch: Record<string, any>): Record<string, any> {
+	const out = { ...base };
+	for (const [k, v] of Object.entries(patch)) {
+		if (isObj(v) && isObj(out[k])) out[k] = merge(out[k], v);
+		else if (Array.isArray(v) && Array.isArray(out[k]) && (k === "ams" || k === "tray") && v.every((x) => isObj(x) && x.id !== undefined)) {
+			const byId = new Map(out[k].filter(isObj).map((x: any) => [String(x.id), x]));
+			for (const x of v) byId.set(String(x.id), merge(byId.get(String(x.id)) ?? {}, x));
+			out[k] = [...byId.values()];
+		} else out[k] = v;
+	}
+	return out;
+}
+
+const num = (v: unknown): number | undefined => {
+	const n = Number(v);
+	return v === undefined || v === null || v === "" || !Number.isFinite(n) ? undefined : n;
+};
+
+/** H2-series pack current + target into one int: low 16 bits = current, high 16 = target. */
+const unpack = (v: unknown): [number | undefined, number | undefined] => {
+	const n = num(v);
+	if (n === undefined) return [undefined, undefined];
+	return n > 0xffff ? [n & 0xffff, n >>> 16] : [n, undefined];
+};
+
+function readTemps(r: Record<string, any>): Temps {
+	const t: Temps = { nozzle: num(r.nozzle_temper), nozzleTarget: num(r.nozzle_target_temper), bed: num(r.bed_temper), bedTarget: num(r.bed_target_temper), chamber: num(r.chamber_temper) };
+	const ext = r.device?.extruder;
+	if (Array.isArray(ext?.info) && ext.info.length) {
+		// Dual-nozzle printers: show the nozzle that's heating (if any), else the first one.
+		const cur = ext.info.find((e: any) => (unpack(e?.temp)[1] ?? 0) > 0) ?? ext.info[0];
+		const [c, tg] = unpack(cur?.temp);
+		t.nozzle ??= c;
+		t.nozzleTarget ??= tg;
+	}
+	if (t.chamber === undefined) t.chamber = unpack(r.device?.ctc?.info?.temp)[0];
+	if (r.device?.bed?.info?.temp !== undefined && t.bed === undefined) [t.bed, t.bedTarget] = unpack(r.device.bed.info.temp);
+	return t;
+}
+
+function readAms(r: Record<string, any>): AmsUnit[] {
+	const units = r.ams?.ams;
+	if (!Array.isArray(units)) return [];
+	return units
+		.filter(isObj)
+		.map((u) => {
+			const trays: AmsTray[] = (Array.isArray(u.tray) ? u.tray : [])
+				.filter(isObj)
+				.sort((a: any, b: any) => Number(a.id) - Number(b.id))
+				.map((t: any) => {
+					const empty = !t.tray_type;
+					const hex = String(t.tray_color ?? "").replace(/^#/, "").slice(0, 6);
+					return {
+						empty,
+						color: /^[0-9a-f]{6}$/i.test(hex) ? `#${hex.toUpperCase()}` : "#555555",
+						material: empty ? "" : String(t.tray_type), // "PLA", "PETG" - sub-brands are too long for a slot
+						remain: num(t.remain) ?? -1,
+					};
+				});
+			const humidityRaw = num(u.humidity_raw);
+			const level = num(u.humidity);
+			const temp = num(u.temp);
+			return {
+				id: Number(u.id) || 0,
+				trays,
+				humidity: humidityRaw,
+				humidityLevel: humidityRaw === undefined ? level : undefined,
+				temp: temp && temp > 0 ? temp : undefined,
+			};
+		})
+		.filter((u) => u.trays.length > 0)
+		.sort((a, b) => a.id - b.id);
+}
 
 /** print_error arrives as a decimal number; Bambu documents the codes in hex. */
 function hexCode(v: unknown): string {
@@ -40,7 +146,6 @@ export class Printer extends EventEmitter {
 	readonly key: string;
 	private client?: MqttClient;
 	private report: Record<string, any> = {};
-	private lights: Record<string, "on" | "off"> = {};
 	private online = false;
 	private offlineReason = "";
 	private finishAt = 0;
@@ -115,35 +220,25 @@ export class Printer extends EventEmitter {
 		return this.publish({ pushing: { sequence_id: String(Date.now()), command: "pushall" } });
 	}
 
-	setLight(node: string, on: boolean): boolean {
-		const ok = this.publish({
-			system: {
-				sequence_id: String(Date.now()),
-				command: "ledctrl",
-				led_node: node,
-				led_mode: on ? "on" : "off",
-				led_on_time: 500,
-				led_off_time: 500,
-				loop_times: 0,
-				interval_time: 0,
-			},
-		});
-		if (ok) {
-			// Show the change immediately; the printer's next report confirms it.
-			this.lights[node] = on ? "on" : "off";
-			this.changed();
-			setTimeout(() => this.pushAll(), 800);
-		}
-		return ok;
-	}
-
 	snapshot(): Snapshot {
 		const r = this.report;
-		const base = { percent: 0, remaining: 0, finishAt: 0, layer: 0, totalLayers: 0, reason: "", lights: { ...this.lights } };
+		const tray = Number(r.ams?.tray_now);
+		const base = {
+			percent: 0,
+			remaining: 0,
+			finishAt: 0,
+			layer: 0,
+			totalLayers: 0,
+			reason: "",
+			temps: readTemps(r),
+			ams: readAms(r),
+			activeTray: Number.isFinite(tray) && tray >= 0 && tray < 254 ? tray : -1,
+		};
 		if (!this.online) {
 			const hasEverConnected = Object.keys(r).length > 0;
-			if (!this.offlineReason && !hasEverConnected) return { ...base, state: "CONNECTING" };
-			return { ...base, state: "OFFLINE", reason: this.offlineReason || "NO CONNECTION" };
+			const blank = { ...base, temps: {}, activeTray: -1 }; // keep the AMS colours, drop live values
+			if (!this.offlineReason && !hasEverConnected) return { ...blank, state: "CONNECTING" };
+			return { ...blank, state: "OFFLINE", reason: this.offlineReason || "NO CONNECTION" };
 		}
 		if (!r.gcode_state) return { ...base, state: "CONNECTING" };
 
@@ -200,17 +295,9 @@ export class Printer extends EventEmitter {
 		if (!p || typeof p !== "object") return;
 		// Most models only send what changed, so merge into a running copy.
 		const prevRemaining = this.report.mc_remaining_time;
-		this.report = { ...this.report, ...p };
+		this.report = merge(this.report, p);
 		if (p.mc_remaining_time !== undefined && (p.mc_remaining_time !== prevRemaining || !this.finishAt)) {
 			this.finishAt = Date.now() + (Number(p.mc_remaining_time) || 0) * 60_000;
-		}
-		const lights = p.lights_report;
-		if (Array.isArray(lights)) {
-			for (const l of lights) {
-				const node = String(l?.node ?? "").toLowerCase();
-				const mode = String(l?.mode ?? "").toLowerCase();
-				if (node && (mode === "on" || mode === "off")) this.lights[node] = mode;
-			}
 		}
 		this.changed();
 	}

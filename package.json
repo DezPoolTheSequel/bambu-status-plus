@@ -1,6 +1,6 @@
 {
   "name": "bambu-status-plus",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "description": "Stream Deck plugin: Bambu Lab printer status with a progress border, and a choice of which value (percent, time left, finish time, layer) goes big in the middle.",

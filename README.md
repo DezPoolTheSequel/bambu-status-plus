@@ -1,8 +1,9 @@
 # Bambu Status Plus
 
 A Stream Deck plugin that shows the live status of your **Bambu Lab printers** over your local
-network. A progress bar runs around the border of the key and fills as the print goes, and **you
-choose what's shown big in the middle and what's shown small underneath**.
+network. A progress bar runs around the border of the key and fills as the print goes. **Press the
+key to flip between pages:** Status, AMS (each unit in turn) and Temperature. On the Status page,
+**you choose what's shown big in the middle and what's shown small underneath**.
 
 It works like the [Bambu Status](https://marketplace.elgato.com/product/bambu-status-be7c7058-2453-4993-8b00-9d68f224e1bb)
 plugin, which always puts the percentage in the middle and the time left below it. This one lets you
@@ -10,22 +11,29 @@ swap them, or pick something else.
 
 ## Features
 
-- **Big (centre) and small (bottom) slots.** Each one can show:
+- **Pages.** Tick which ones you want: **Status**, **AMS**, **Temperature**. Each press goes to
+  the next page: Status → AMS 1 → AMS 2 → … → Temperature → Status. The progress border stays on
+  every page.
+- **Status page:** big (centre) and small (bottom) slots. Each one can show:
   - percent complete (`93%`)
   - time remaining (`3h 19m`, `11 min`, or `3:19`)
   - finish time (`7:45 PM` or `19:45`)
   - layer (`61/190`)
   - nothing
-- **Swap button** in the settings, or set the key press to swap big and small.
-- **Optional state line.** Hide `PRINTING` / `PAUSED` / … and the big value gets bigger.
+
+  There's a **swap** button in the settings and an option to hide the state line, which makes the
+  big value bigger.
+- **AMS page:** the filament colour in every slot, labelled with the material (or the remaining
+  %, if you choose that instead). It also shows the slot that's feeding right now, plus humidity
+  and temperature. Supports AMS, AMS 2 Pro, AMS HT and AMS lite. With several units, dots show
+  which unit you're on.
+- **Temperature page:** nozzle, bed and chamber temperatures, with the target temperature while
+  heating. Shown in °C or °F. Works with H2-series printers, which report temperatures differently
+  from older models.
 - **Colours change with the state:** printing, preparing, paused, done, idle, cancelled, error,
   offline. When something is wrong, the bottom line says what (`CHECK ACCESS CODE`,
   `CODE 0300400D`, …).
-- **Three actions:**
-  - **Printer Status**: progress key. Pressing it refreshes, or swaps the two values if you set it to.
-  - **Printer Status + Light**: the same key with a light indicator. Pressing it toggles the chamber light.
-  - **Printer Light**: a chamber light on/off toggle.
-- **Stream Deck +** dials and touch strip are supported for the status actions.
+- **Stream Deck +** dials show the Status page. Push or tap to refresh.
 - One connection per printer, shared by every key that shows it.
 - Access codes are stored in the plugin's global settings, not in the key, so they are never
   included in an exported profile.
@@ -85,9 +93,9 @@ npx streamdeck link com.dez.bambustatus.sdPlugin
   password = access code). It subscribes to `device/<serial>/report` and merges the partial reports
   the printer sends into one state. It asks for a full report when it connects and then every
   5 minutes.
-- `src/render.ts`: draws each key as a 144×144 SVG, including the progress border and the big and
-  small slots. It also builds the Stream Deck + touch strip feedback.
-- `src/actions.ts`: the three actions, the shared credentials, key presses and the settings-panel
+- `src/render.ts`: draws each page as a 144×144 SVG, including the progress border, the big and
+  small slots, the AMS slots and the temperature rows. It also builds the Stream Deck + touch strip feedback.
+- `src/actions.ts`: the key action, page cycling, the shared credentials and the settings-panel
   status line.
 - `com.dez.bambustatus.sdPlugin/ui/printer.html`: the settings panel (plain HTML/JS).
 - `com.dez.bambustatus.sdPlugin/layouts/status.json`: the Stream Deck + touch strip layout.
@@ -99,8 +107,6 @@ npx streamdeck link com.dez.bambustatus.sdPlugin
 - **`NO CONNECTION`**: check the IP address. Give the printer a DHCP reservation so the address
   doesn't change. On recent firmware, LAN access may also need to be enabled in the printer's
   network settings.
-- **The light key does nothing:** try a different **Light** option in the settings
-  (`chamber_light2` is the second light on the H2D).
 
 ## License
 
