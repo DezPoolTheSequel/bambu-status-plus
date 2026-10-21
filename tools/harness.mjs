@@ -26,11 +26,11 @@ const AMS2 = {
 };
 const TEMPS = { nozzle_temper: 219.6, nozzle_target_temper: 220, bed_temper: 64.8, bed_target_temper: 65, chamber_temper: 38 };
 // H2-style report: temperatures packed (target << 16 | current) under device.*
-const H2 = { device: { extruder: { info: [{ id: 0, temp: (250 << 16) | 248 }] }, bed: { info: { temp: (90 << 16) | 89 } }, ctc: { info: { temp: 45 } } } };
+const H2 = { device: { extruder: { info: [{ id: 0, temp: (250 << 16) | 248, snow: (0 << 8) | 3 }] }, bed: { info: { temp: (90 << 16) | 89 } }, ctc: { info: { temp: 45 } } } };
 const printers = {
 	P93: { gcode_state: "RUNNING", mc_percent: 93, mc_remaining_time: mins(11), layer_num: 220, total_layer_num: 236, stg_cur: 0, ams: AMS2, ...TEMPS },
-	H2: { gcode_state: "RUNNING", mc_percent: 47, mc_remaining_time: 80, ...H2, ams: { ams: [AMS2.ams[0]], tray_now: "2" } },
-	IDLEAMS: { gcode_state: "IDLE", ams: { ams: [AMS2.ams[0]], tray_now: "255" }, nozzle_temper: 28, nozzle_target_temper: 0, bed_temper: 25, bed_target_temper: 0 },
+	H2: { gcode_state: "RUNNING", mc_percent: 47, mc_remaining_time: 80, ...H2, ams: { ams: [AMS2.ams[0]], tray_now: "255" } },
+	IDLEAMS: { gcode_state: "IDLE", ams: { ams: [AMS2.ams[0]], tray_now: "0" }, nozzle_temper: 28, nozzle_target_temper: 0, bed_temper: 25, bed_target_temper: 0 },
 	P32: { gcode_state: "RUNNING", mc_percent: 32, mc_remaining_time: mins(199), layer_num: 61, total_layer_num: 190, stg_cur: 0 },
 	PAUSE: { gcode_state: "PAUSE", mc_percent: 57, mc_remaining_time: 48, layer_num: 80, total_layer_num: 140 },
 	DONE: { gcode_state: "FINISH", mc_percent: 100, mc_remaining_time: 0, layer_num: 140, total_layer_num: 140 },
@@ -55,6 +55,8 @@ const scenarios = [
 	["12-ams", STATUS, "P93", { pageStatus: false, pageTemps: false }, "H2S"],
 	["13-ams-remain", STATUS, "P93", { pageStatus: false, pageTemps: false, amsView: "remain" }, "H2S"],
 	["17-ams-idle", STATUS, "IDLEAMS", { pageStatus: false, pageTemps: false }, "P2S"],
+	["22-ams-h2-snow", STATUS, "H2", { pageStatus: false, pageTemps: false }, "H2S"],
+	["23-ams-h2-remain", STATUS, "H2", { pageStatus: false, pageTemps: false, amsView: "remain" }, "H2S"],
 	["18-no-ams", STATUS, "IDLE", { pageStatus: false, pageTemps: false }, "A1"],
 	["19-temps", STATUS, "P93", { pageStatus: false, pageAms: false }, "H2S"],
 	["20-temps-h2-F", STATUS, "H2", { pageStatus: false, pageAms: false, tempUnit: "F" }, "H2D"],

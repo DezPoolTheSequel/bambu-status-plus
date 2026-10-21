@@ -242,7 +242,11 @@ export function renderAms(snap: Snapshot, s: ActionSettings, view: View, unitInd
 		} else {
 			parts.push(`<rect ${box} fill="${t.color}"/>`);
 		}
-		if (!t.empty) parts.push(`<rect ${box} fill="none" stroke="${active ? p.accent : "#FFFFFF"}" stroke-opacity="${active ? 1 : 0.35}" stroke-width="${active ? 3 : 1.5}"/>`);
+		if (active) {
+			// Black ring under a white one: one of the two always contrasts, whatever the filament or background.
+			parts.push(`<rect ${box} fill="none" stroke="#000000" stroke-width="7"/>`);
+			parts.push(`<rect ${box} fill="none" stroke="#FFFFFF" stroke-width="3"/>`);
+		} else if (!t.empty) parts.push(`<rect ${box} fill="none" stroke="#FFFFFF" stroke-opacity=".35" stroke-width="1.5"/>`);
 
 		// Slot number badge
 		const bh = Math.min(18, cellH - 8);

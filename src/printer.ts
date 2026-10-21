@@ -130,6 +130,28 @@ function readAms(r: Record<string, any>): AmsUnit[] {
 		.sort((a, b) => a.id - b.id);
 }
 
+/**
+ * The slot feeding the nozzle, numbered like tray_now: AMS n slot k = n*4 + k, AMS HT = its unit id (128+).
+ * H2-series (and other new) printers report it per extruder in device.extruder.info[].snow as
+ * (ams id << 8 | slot); older models use ams.tray_now (255 = nothing loaded, 254 = external spool).
+ */
+function readActiveTray(r: Record<string, any>): number {
+	const info = r.device?.extruder?.info;
+	if (Array.isArray(info)) {
+		const loaded = info.filter((e: any) => num(e?.snow) !== undefined && (Number(e.snow) >> 8) !== 0xff);
+		// Dual nozzle: prefer the one that's heating, i.e. the one printing.
+		const cur = loaded.find((e: any) => (unpack(e?.temp)[1] ?? 0) > 0) ?? loaded[0];
+		if (cur) {
+			const ams = Number(cur.snow) >> 8;
+			const slot = Number(cur.snow) & 0xff;
+			if (ams >= 128) return ams;
+			if (ams < 16) return ams * 4 + slot;
+		}
+	}
+	const tray = num(r.ams?.tray_now);
+	return tray !== undefined && tray >= 0 && tray < 254 ? tray : -1;
+}
+
 /** print_error arrives as a decimal number; Bambu documents the codes in hex. */
 function hexCode(v: unknown): string {
 	const s = String(v ?? "").trim();
@@ -222,7 +244,6 @@ export class Printer extends EventEmitter {
 
 	snapshot(): Snapshot {
 		const r = this.report;
-		const tray = Number(r.ams?.tray_now);
 		const base = {
 			percent: 0,
 			remaining: 0,
@@ -232,7 +253,7 @@ export class Printer extends EventEmitter {
 			reason: "",
 			temps: readTemps(r),
 			ams: readAms(r),
-			activeTray: Number.isFinite(tray) && tray >= 0 && tray < 254 ? tray : -1,
+			activeTray: readActiveTray(r),
 		};
 		if (!this.online) {
 			const hasEverConnected = Object.keys(r).length > 0;

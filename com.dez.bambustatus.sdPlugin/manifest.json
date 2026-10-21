@@ -1,7 +1,7 @@
 {
   "$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
   "Name": "Bambu Status Plus",
-  "Version": "1.2.0.0",
+  "Version": "1.2.1.0",
   "Author": "Dez",
   "Description": "Live status of your Bambu Lab printers over LAN. A progress border fills as the print runs. Press the key to flip between Status, AMS (each unit in turn) and Temperature pages, and choose what goes big in the middle of the Status page.",
   "Category": "Bambu Status Plus",
